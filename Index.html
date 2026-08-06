@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asistencia · Escaneo QR</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    --bg: #14171a; --panel: #1d2126; --panel-2: #262b31; --line: #333a41;
+    --text: #e8eaed; --dim: #8b939c; --accent: #d4842e; --accent-dim: #6b4a24;
+    --ok: #4caf7d; --ok-dim: #1f3d2e; --bad: #d6584f;
+    font-family: -apple-system, 'Inter', Arial, sans-serif;
+    background: var(--bg); color: var(--text); margin: 0; padding: 0;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 15px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); font-weight: 600; margin: 0 0 4px; }
+  h1 span { color: var(--accent); }
+  .subtitle { font-size: 13px; color: var(--dim); margin-bottom: 20px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .panel-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+  .step-num { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: var(--accent-dim); color: var(--accent); font-size: 10px; font-weight: 700; }
+  label { display: block; font-size: 12px; color: var(--dim); margin: 10px 0 5px; }
+  label:first-child { margin-top: 0; }
+  input[type=text] { width: 100%; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); padding: 10px 12px; border-radius: 7px; font-size: 14px; outline: none; }
+  input[type=text]:focus { border-color: var(--accent); }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 18px; border-radius: 8px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; margin-top: 12px; }
+  .btn:active { opacity: 0.75; }
+  .btn-primary { background: var(--accent); color: #1a1200; }
+  .btn-secondary { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); }
+  .btn-ok { background: var(--ok); color: #06170e; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .counter-row { display: flex; gap: 10px; margin-bottom: 4px; }
+  .counter { flex: 1; background: var(--panel-2); border-radius: 8px; padding: 10px 12px; text-align: center; }
+  .counter .n { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .counter .l { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); }
+  .counter.presentes .n { color: var(--ok); }
+  .counter.ausentes .n { color: var(--dim); }
+  #qr-reader { border-radius: 8px; overflow: hidden; margin-top: 10px; }
+  #qr-reader img { display: none; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--panel-2); border: 1px solid var(--accent); color: var(--text); padding: 10px 18px; border-radius: 20px; font-size: 13px; z-index: 999; opacity: 0; transition: opacity 0.25s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+  .toast.bad { border-color: var(--bad); }
+  .search-box { margin-bottom: 8px; }
+  .list { max-height: 320px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--line); }
+  .row { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; border-bottom: 1px solid var(--line); font-size: 13.5px; cursor: pointer; }
+  .row:last-child { border-bottom: none; }
+  .row:active { background: var(--panel-2); }
+  .row.present .name { color: var(--ok); }
+  .badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.05em; background: var(--panel-2); color: var(--dim); flex-shrink: 0; }
+  .row.present .badge { background: var(--ok-dim); color: var(--ok); }
+  .hint { font-size: 11.5px; color: var(--dim); line-height: 1.5; margin-top: 8px; }
+  .sync-result { font-size: 12.5px; margin-top: 10px; padding: 10px 12px; border-radius: 7px; }
+  .sync-result.ok { background: var(--ok-dim); color: var(--ok); }
+  .sync-result.err { background: #3a1f1c; color: var(--bad); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Asistencia<span>·</span>Escaneo QR</h1>
+    <div class="subtitle">86 alumnos cargados</div>
+
+    <div class="panel">
+      <div class="panel-title"><span class="step-num">1</span> Configurar esta clase</div>
+      <label>Columna en el Sheet (ej: fecha de hoy)</label>
+      <input type="text" id="input-columna" placeholder="ej: 31/07">
+      <label>URL del Web App de Google Apps Script</label>
+      <input type="text" id="input-url" placeholder="https://script.google.com/macros/s/.../exec">
+      <div class="hint">Se pega una vez por clase. No queda guardada al cerrar la página.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title"><span class="step-num">2</span> Escanear</div>
+      <div class="counter-row">
+        <div class="counter presentes"><div class="n" id="count-presentes">0</div><div class="l">Presentes</div></div>
+        <div class="counter ausentes"><div class="n" id="count-ausentes">86</div><div class="l">Ausentes</div></div>
+      </div>
+      <button class="btn btn-primary" id="btn-toggle-cam">Iniciar cámara</button>
+      <div id="qr-reader"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title"><span class="step-num">3</span> Lista (tocá un nombre para marcar manual)</div>
+      <input type="text" id="search" class="search-box" placeholder="Buscar alumno...">
+      <div class="list" id="lista"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title"><span class="step-num">4</span> Finalizar</div>
+      <button class="btn btn-ok" id="btn-sync">Subir a Google Sheets</button>
+      <button class="btn btn-secondary" id="btn-download">Descargar respaldo en Excel</button>
+      <div id="sync-result"></div>
+    </div>
+  </div>
+  <div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+(function() {
+  const ROSTER = ["Briseida Almada","Alvaro Benjamin Avalos","Geronimo Baez","Eloy Andrés Baigorri","Martina Barrionuevo","Chiara Narella Batistín","Franco Damián Benítez","Octavio Bernardi","Alejo Boeris","Santiago Bravin Repetto","Silvia Micaela Bustamante","Gonzalo Leonel Bustos","Sofia Victoria Caballero","Julia Capkovic Vilche","Tiziana Shaiel Cari","Leticia Abigail Castagneri","Felipe Castillo","Jason Ezahiah Cattaneo Franco","Julieta Anahi Ceballos Rocha","Dante Centani","Carlos Samuel Céspedes","Nayla Michele Coky","Milagros Abigail Comba","Celeste Aylén Contrera","Josefina Lis Cordoba","Gianella Paola Cruciani","Bruno Destefanis","Santino Diaz Oviedo","Guadalupe Azul Duveaux Salgado","Raquel Fernandez Cota","Lucio Forgioni","Emilia Gaía Giordanengo","María Candela Gerez","Gemma Yazmin Giraudo","Francisco Gon","Franco Gonzalez","María Martina Grosso","Milena Hernández","Juan Bautista Hildmann","Candela Jona","Aarón Obed Jurado","Mayra La Rocca","Clementina Livio","Celeste Lopez Silva","Rocío Luna","María Milagros Lupo Arciénaga","María Lola Machado Salva","Ignacio Valentín Manansero","Jenaro Marchini Tleye","Lorenzo Martin","Mariana Anahi Martín","Franco Santino Milano","Magdalena Molina","Juan Ezequiel Moriondo Rodriguez","Victoria Ñañez","Brisa Nerea Nuñez","Francisco Nicolás Onnainty Ortiz","Felipe Orellano","Guadalupe Paez Casamitjana","Emma Araceli Paez","Camila Palma","Daniela Luz Paredes Sosa","Lourdes Belén Peccoud","Agostina Perez","Lucas Nahuel Perona","Guillermina Perrone","Isabella Delia Perucca","Morena Piombo","Avril Quinteros","Morena Remi","Catalina Sol Retamoso","Nazarena Ribi","Valentin Ripanti","Mía Rodriguez Bordi","Emilia Rulloni Romero","Mirko Sarmiento","Julian Silvester","Celina Claudia Solano","Delfina Spat","Nicolás Urquiza","Sofia Villamarin","Roman Osvaldo Villarreal","Lola Villasuso Meynet","Julian Wlasuk Ostertag","Melany Zalazar","Luca Zuppa"];
+
+  const state = {};
+  ROSTER.forEach(n => state[n] = false);
+
+  const listEl = document.getElementById('lista');
+  const countP = document.getElementById('count-presentes');
+  const countA = document.getElementById('count-ausentes');
+  const toastEl = document.getElementById('toast');
+  const searchEl = document.getElementById('search');
+
+  function normalize(s) {
+    return s.normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+      .toLowerCase().replace(/[,.]/g,' ').split(/\s+/).filter(Boolean).sort().join(' ');
+  }
+  const normIndex = {};
+  ROSTER.forEach(n => normIndex[normalize(n)] = n);
+
+  function showToast(msg, bad) {
+    toastEl.textContent = msg;
+    toastEl.className = 'toast show' + (bad ? ' bad' : '');
+    setTimeout(() => toastEl.className = 'toast', 1800);
+  }
+
+  function renderList(filter) {
+    const f = (filter || '').toLowerCase();
+    listEl.innerHTML = '';
+    ROSTER.filter(n => n.toLowerCase().includes(f)).forEach(nombre => {
+      const row = document.createElement('div');
+      row.className = 'row' + (state[nombre] ? ' present' : '');
+      row.innerHTML = `<span class="name">${nombre}</span><span class="badge">${state[nombre] ? 'Presente' : 'Ausente'}</span>`;
+      row.onclick = () => { state[nombre] = !state[nombre]; renderList(searchEl.value); updateCounters(); };
+      listEl.appendChild(row);
+    });
+  }
+
+  function updateCounters() {
+    const p = Object.values(state).filter(Boolean).length;
+    countP.textContent = p;
+    countA.textContent = ROSTER.length - p;
+  }
+
+  function markPresent(rawText) {
+    const key = normalize(rawText);
+    const nombre = normIndex[key];
+    if (!nombre) { showToast('QR no reconocido: ' + rawText, true); return; }
+    if (state[nombre]) { showToast(nombre + ' ya estaba presente'); return; }
+    state[nombre] = true;
+    renderList(searchEl.value);
+    updateCounters();
+    showToast('✓ ' + nombre);
+  }
+
+  searchEl.addEventListener('input', () => renderList(searchEl.value));
+
+  let html5QrCode = null;
+  let camActive = false;
+  const btnCam = document.getElementById('btn-toggle-cam');
+
+  btnCam.onclick = async () => {
+    if (!camActive) {
+      html5QrCode = new Html5Qrcode('qr-reader');
+      try {
+        await html5QrCode.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: 240 },
+          (decodedText) => markPresent(decodedText),
+          () => {}
+        );
+        camActive = true;
+        btnCam.textContent = 'Detener cámara';
+      } catch (err) {
+        showToast('No se pudo abrir la cámara: ' + err, true);
+      }
+    } else {
+      await html5QrCode.stop();
+      html5QrCode.clear();
+      camActive = false;
+      btnCam.textContent = 'Iniciar cámara';
+    }
+  };
+
+  document.getElementById('btn-sync').onclick = async () => {
+    const url = document.getElementById('input-url').value.trim();
+    const columna = document.getElementById('input-columna').value.trim();
+    const resultEl = document.getElementById('sync-result');
+    if (!url || !columna) {
+      resultEl.className = 'sync-result err';
+      resultEl.textContent = 'Falta la URL del Web App o el nombre de la columna.';
+      return;
+    }
+    const records = ROSTER.map(n => ({ name: n, value: state[n] ? 1 : 0 }));
+    resultEl.className = 'sync-result';
+    resultEl.textContent = 'Subiendo...';
+    try {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ column: columna, records })
+      });
+      const data = await resp.json();
+      resultEl.className = 'sync-result ok';
+      resultEl.textContent = `Listo: ${data.matched} alumnos actualizados en la columna "${columna}".` +
+        (data.notFound && data.notFound.length ? ` Sin encontrar en el Sheet: ${data.notFound.join(', ')}` : '');
+    } catch (err) {
+      resultEl.className = 'sync-result err';
+      resultEl.textContent = 'No se pudo conectar (¿sin internet ahora? probá el botón de Excel de abajo, y reintentá subir más tarde con este mismo botón).';
+    }
+  };
+
+  document.getElementById('btn-download').onclick = () => {
+    const columna = document.getElementById('input-columna').value.trim() || 'Asistencia';
+    const data = [['Nombre', columna]].concat(ROSTER.map(n => [n, state[n] ? 1 : 0]));
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Asistencia');
+    XLSX.writeFile(wb, `asistencia_${columna.replace(/[^a-zA-Z0-9]/g,'_')}.xlsx`);
+  };
+
+  renderList('');
+  updateCounters();
+})();
+</script>
+</body>
+</html>
